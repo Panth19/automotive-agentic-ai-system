@@ -1,6 +1,6 @@
 fastapi>=0.110.0
 uvicorn>=0.29.0
-streamlit>=1.32.0
+streamlit>=1.37.0
 langgraph>=0.0.31
 langchain>=0.1.0
 langchain-groq>=0.1.0
@@ -14,3 +14,5 @@ python-multipart>=0.0.9
 aiofiles>=23.2.1
 pillow>=10.2.0
 fastmcp>=0.1.0
+python-dotenv>=1.0.0
+streamlit-mic-recorder>=0.0.8
