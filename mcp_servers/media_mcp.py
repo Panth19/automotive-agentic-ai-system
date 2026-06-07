@@ -4,12 +4,12 @@ Controls vehicle media system
 """
 from fastmcp import FastMCP
 import random
-import sys
-sys.path.insert(0, '/workspace')
-from mcp_servers.vehicle_state_mcp import vehicle_state
 
 mcp = FastMCP("media-control")
 
+from mcp_servers.vehicle_state_mcp import vehicle_state
+
+# Sample music database
 music_database = {
     "rock": ["AC/DC - Highway to Hell", "Queen - Bohemian Rhapsody", "Led Zeppelin - Stairway to Heaven"],
     "jazz": ["Miles Davis - Kind of Blue", "John Coltrane - Giant Steps", "Ella Fitzgerald - Dream a Little Dream"],
@@ -34,20 +34,35 @@ def play_music(genre: str = None, artist: str = None, mood: str = None) -> dict:
         vehicle_state["media"]["current_track"] = track
         vehicle_state["media"]["is_playing"] = True
         return {"status": "success", "track": track, "genre": genre}
+    
     if mood:
-        mood_to_genre = {"relaxed": "classical", "energetic": "rock", "happy": "pop", "focused": "jazz"}
+        # Map moods to genres
+        mood_to_genre = {
+            "relaxed": "classical",
+            "energetic": "rock",
+            "happy": "pop",
+            "focused": "jazz"
+        }
         genre = mood_to_genre.get(mood.lower(), "pop")
         track = random.choice(music_database[genre])
         vehicle_state["media"]["current_track"] = track
         vehicle_state["media"]["is_playing"] = True
         return {"status": "success", "track": track, "mood": mood}
-    return {"status": "success", "track": vehicle_state["media"]["current_track"], "message": "Playing current selection"}
+    
+    vehicle_state["media"]["is_playing"] = True
+    return {
+        "status": "success",
+        "track": vehicle_state["media"]["current_track"],
+        "is_playing": True,
+        "message": "Playing current selection",
+    }
 
 @mcp.tool()
 def set_volume(volume: int) -> dict:
     """Set media volume (0-100)"""
     if volume < 0 or volume > 100:
         return {"error": "Volume must be between 0 and 100"}
+    
     vehicle_state["media"]["volume"] = volume
     return {"status": "success", "volume": volume}
 
@@ -70,6 +85,8 @@ def play_radio(station: str = None) -> dict:
         vehicle_state["media"]["current_track"] = f"Radio: {radio_stations[station]}"
         vehicle_state["media"]["is_playing"] = True
         return {"status": "success", "station": radio_stations[station]}
+    
+    # Play default station
     default_station = radio_stations["antenna_1"]
     vehicle_state["media"]["current_track"] = f"Radio: {default_station}"
     vehicle_state["media"]["is_playing"] = True
@@ -90,7 +107,11 @@ def resume_media() -> dict:
 @mcp.tool()
 def get_current_track() -> dict:
     """Get current track information"""
-    return {"current_track": vehicle_state["media"]["current_track"], "is_playing": vehicle_state["media"]["is_playing"], "volume": vehicle_state["media"]["volume"]}
+    return {
+        "current_track": vehicle_state["media"]["current_track"],
+        "is_playing": vehicle_state["media"]["is_playing"],
+        "volume": vehicle_state["media"]["volume"]
+    }
 
 if __name__ == "__main__":
     mcp.run()
