@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://unpkg.com/streamlit-component-lib@2.0.0/dist/streamlit-component-lib.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    #listenBtn {
+      background: #1c69d4;
+      color: white;
+      box-shadow: 0 4px 14px rgba(28, 105, 212, 0.35);
+    }
+    #listenBtn.listening {
+      background: #d32f2f;
+      box-shadow: 0 4px 14px rgba(211, 47, 47, 0.35);
+      animation: pulse 1.2s infinite;
+    }
+    #stopBtn {
+      background: #444;
+      color: white;
+      display: none;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+    #status {
+      font-size: 14px;
+      color: #333;
+      min-height: 20px;
+    }
+    #interim {
+      font-size: 15px;
+      color: #666;
+      font-style: italic;
+      min-height: 22px;
+    }
+    #final {
+      font-size: 16px;
+      color: #111;
+      font-weight: 600;
+      min-height: 24px;
+    }
+    .badge {
+      display: inline-block;
+      background: #e8f1fc;
+      color: #1c69d4;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="controls">
+      <button id="listenBtn" type="button">🎤 Start listening</button>
+      <button id="stopBtn" type="button">⏹ Stop</button>
+      <span class="badge">Live microphone</span>
+    </div>
+    <div id="status">Click the button and speak your command.</div>
+    <div id="interim"></div>
+    <div id="final"></div>
+  </div>
+
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    let recognition = null;
+    let listening = false;
+    let continuous = false;
+    let finalTranscript = "";
+    let sent = false;
+
+    const listenBtn = document.getElementById("listenBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+    const interimEl = document.getElementById("interim");
+    const finalEl = document.getElementById("final");
+
+    function sendValue(payload) {
+      Streamlit.setComponentValue(payload);
+    }
+
+    function setListening(active) {
+      listening = active;
+      listenBtn.classList.toggle("listening", active);
+      listenBtn.textContent = active ? "🔴 Listening..." : "🎤 Start listening";
+      stopBtn.style.display = active && continuous ? "inline-block" : "none";
+    }
+
+    function startRecognition() {
+      if (!SpeechRecognition) {
+        statusEl.textContent = "Live speech not supported in this browser. Use Chrome or Edge.";
+        sendValue({ error: "unsupported", done: true });
+        return;
+      }
+
+      if (listening) return;
+
+      finalTranscript = "";
+      sent = false;
+      interimEl.textContent = "";
+      finalEl.textContent = "";
+
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = continuous;
+      recognition.maxAlternatives = 1;
+
+      setListening(true);
+      statusEl.textContent = "Listening... speak your command now.";
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const piece = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += piece;
+          } else {
+            interim += piece;
+          }
+        }
+        interimEl.textContent = interim.trim();
+        if (finalTranscript.trim()) {
+          finalEl.textContent = finalTranscript.trim();
+        }
+
+        if (!continuous && finalTranscript.trim()) {
+          finish(finalTranscript.trim());
+        }
+      };
+
+      recognition.onerror = (event) => {
+        statusEl.textContent = "Microphone error: " + event.error;
+        setListening(false);
+        if (event.error !== "aborted") {
+          sendValue({ error: event.error, done: true });
+        }
+      };
+
+      recognition.onend = () => {
+        if (continuous && finalTranscript.trim()) {
+          finish(finalTranscript.trim());
+        } else if (!continuous) {
+          setListening(false);
+          if (!finalTranscript.trim()) {
+            statusEl.textContent = "No speech detected. Try again.";
+          }
+        }
+      };
+
+      recognition.start();
+    }
+
+    function stopRecognition() {
+      if (recognition && listening) {
+        recognition.stop();
+      }
+      setListening(false);
+      if (finalTranscript.trim()) {
+        finish(finalTranscript.trim());
+      }
+    }
+
+    function finish(transcript) {
+      if (sent || !transcript) return;
+      sent = true;
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+      }
+      setListening(false);
+      statusEl.textContent = "Command captured.";
+      interimEl.textContent = "";
+      finalEl.textContent = transcript;
+      sendValue({ transcript, done: true, live: true });
+    }
+
+    listenBtn.addEventListener("click", startRecognition);
+    stopBtn.addEventListener("click", stopRecognition);
+
+    function onRender(event) {
+      const args = event.detail.args || {};
+      continuous = Boolean(args.continuous);
+      if (args.button_label) {
+        listenBtn.textContent = listening ? "🔴 Listening..." : args.button_label;
+      }
+      Streamlit.setFrameHeight(150);
+    }
+
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(150);
+  </script>
+</body>
+</html>
